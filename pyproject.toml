@@ -1,6 +1,6 @@
 [project]
 name = "naylence-factory"
-version = "0.1.2"
+version = "0.1.3"
 description = "Naylence resource factory and extension management framework"
 authors = [
     {name = "Naylence Dev",email = "naylencedev@gmail.com"}
