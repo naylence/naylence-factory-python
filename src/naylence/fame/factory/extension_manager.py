@@ -1,7 +1,6 @@
 import importlib.metadata
 import inspect
 import threading
-import types
 from typing import Any, Dict, Generic, List, Optional, Tuple, Type, TypeVar, cast
 from functools import lru_cache
 
@@ -258,7 +257,7 @@ class ExtensionManager(Generic[T]):
         """
         Return all registered extensions for the base_type as {name: factory}.
         Returns a readonly copy to prevent mutation of the internal registry.
-        
+
         :param base_type: the base type/interface to get extensions for
         :returns: dictionary mapping extension names to their factory classes (readonly copy)
         """
@@ -267,10 +266,10 @@ class ExtensionManager(Generic[T]):
         )
         # Return a copy to prevent mutation of the internal registry
         return mgr._registry.copy()
-        
+
         # Alternative implementation for truly immutable result:
         # return types.MappingProxyType(mgr._registry)
-        # Note: MappingProxyType creates a read-only view, but some IDEs/tools 
+        # Note: MappingProxyType creates a read-only view, but some IDEs/tools
         # might not recognize it as Dict[str, Type[T]] for type checking
 
     @staticmethod
