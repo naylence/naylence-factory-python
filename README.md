@@ -1,3 +1,5 @@
+[![Join our Discord](https://img.shields.io/badge/Discord-Join%20Chat-blue?logo=discord)](https://discord.gg/nwZAeqdv7y)
+
 # Naylence factory
 
 **Naylence factory** is the resource factory and extension management framework for the [Naylence](https://github.com/naylence) ecosystem.
