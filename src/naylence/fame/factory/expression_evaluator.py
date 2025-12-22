@@ -1,10 +1,15 @@
 import os
-import re
 from typing import Any, Optional
 
 
 class MissingEnvironmentVariableError(Exception):
     """Raised when an environment variable is required but not defined."""
+
+    pass
+
+
+class ExpressionRecursionError(Exception):
+    """Raised when expression evaluation exceeds the maximum recursion depth."""
 
     pass
 
@@ -25,8 +30,9 @@ class ExpressionEvaluator:
     Policy decisions about when to evaluate are handled by the caller.
     """
 
-    # Regex pattern for environment variable expressions (global search)
-    _env_pattern = re.compile(r"\$\{env:([^:}]+)(?::([^}]*))?\}")
+    _max_evaluation_depth = 10
+    _expression_start = "${"
+    _env_prefix = "env:"
 
     @classmethod
     def is_expression(cls, value: Any) -> bool:
@@ -42,7 +48,10 @@ class ExpressionEvaluator:
         if not isinstance(value, str):
             return False
 
-        return cls._env_pattern.search(value) is not None
+        if cls._env_prefix not in value:
+            return False
+
+        return cls._find_next_expression(value, 0) is not None
 
     @classmethod
     def evaluate(cls, value: Any, target_type: Optional[type] = None) -> Any:
@@ -60,7 +69,7 @@ class ExpressionEvaluator:
         if not isinstance(value, str):
             return value
 
-        evaluated = cls._evaluate_string(value)
+        evaluated = cls._evaluate_string(value, 0)
 
         # If target type is specified and it's a scalar type, try conversion
         if target_type and target_type in (int, float, bool):
@@ -69,7 +78,7 @@ class ExpressionEvaluator:
         return evaluated
 
     @classmethod
-    def _evaluate_string(cls, value: str) -> str:
+    def _evaluate_string(cls, value: str, depth: int) -> str:
         """
         Evaluate all expressions in a string value using substitution.
 
@@ -84,26 +93,119 @@ class ExpressionEvaluator:
                                            but not defined and no default is provided
         """
 
-        def replace_env_expression(match):
-            """Replace a single environment variable expression."""
-            var_name = match.group(1)
-            default_value = match.group(2)
+        if depth > cls._max_evaluation_depth:
+            raise ExpressionRecursionError(
+                f"Expression evaluation exceeded the maximum recursion depth: {value}"
+            )
 
-            # Check if environment variable exists
-            if var_name in os.environ:
-                return os.environ[var_name]
-            elif default_value is not None:
-                # Default was provided in the expression (could be empty string)
-                return default_value
-            else:
-                # No default provided and variable doesn't exist
-                raise MissingEnvironmentVariableError(
-                    f"Environment variable '{var_name}' is required but not defined. "
-                    f"Either set the environment variable or provide a default value in the expression."
-                )
+        result_parts = []
+        index = 0
 
-        # Substitute all environment variable expressions
-        return cls._env_pattern.sub(replace_env_expression, value)
+        while index < len(value):
+            expression = cls._find_next_expression(value, index)
+            if expression is None:
+                result_parts.append(value[index:])
+                break
+
+            start, end, var_name, default_value = expression
+            if start > index:
+                result_parts.append(value[index:start])
+
+            resolved = cls._resolve_environment_variable(
+                var_name, default_value, depth
+            )
+            result_parts.append(resolved)
+            index = end + 1
+
+        return "".join(result_parts)
+
+    @classmethod
+    def _resolve_environment_variable(
+        cls, var_name: str, default_value: Optional[str], depth: int
+    ) -> str:
+        if var_name in os.environ:
+            return os.environ[var_name]
+
+        if default_value is not None:
+            return cls._evaluate_default(default_value, depth)
+
+        raise MissingEnvironmentVariableError(
+            f"Environment variable '{var_name}' is required but not defined. "
+            f"Either set the environment variable or provide a default value in the expression."
+        )
+
+    @classmethod
+    def _evaluate_default(cls, default_value: str, depth: int) -> str:
+        if cls._env_prefix not in default_value:
+            return default_value
+
+        return cls._evaluate_string(default_value, depth + 1)
+
+    @classmethod
+    def _find_next_expression(
+        cls, value: str, start_index: int
+    ) -> Optional[tuple[int, int, str, Optional[str]]]:
+        search_index = start_index
+
+        while search_index < len(value):
+            start = value.find(cls._expression_start, search_index)
+            if start == -1:
+                return None
+
+            type_start = start + len(cls._expression_start)
+            type_separator = value.find(":", type_start)
+            if type_separator == -1:
+                search_index = start + len(cls._expression_start)
+                continue
+
+            expr_type = value[type_start:type_separator]
+            if expr_type != "env":
+                search_index = start + len(cls._expression_start)
+                continue
+
+            index = type_separator + 1
+            key_start = index
+            while index < len(value):
+                char = value[index]
+                if char in (":", "}"):
+                    break
+                index += 1
+
+            if index >= len(value):
+                return None
+
+            var_name = value[key_start:index]
+            if not var_name:
+                search_index = start + len(cls._expression_start)
+                continue
+
+            if value[index] == "}":
+                return (start, index, var_name, None)
+
+            default_start = index + 1
+            level = 1
+            index = default_start
+
+            while index < len(value):
+                char = value[index]
+                next_char = value[index + 1] if index + 1 < len(value) else ""
+
+                if char == "$" and next_char == "{":
+                    level += 1
+                    index += 2
+                    continue
+
+                if char == "}":
+                    level -= 1
+                    if level == 0:
+                        default_value = value[default_start:index]
+                        return (start, index, var_name, default_value)
+
+                index += 1
+
+            return None
+
+        return None
 
     @classmethod
     def _convert_to_scalar(cls, value: str, target_type: type) -> Any:

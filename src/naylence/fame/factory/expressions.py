@@ -5,7 +5,7 @@ Provides helper functions to create expressions in a more readable way
 than manually constructing the ${env:VAR:default} syntax.
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 
 class MissingEnvironmentVariableError(Exception):
@@ -22,7 +22,7 @@ class Expressions:
     """
 
     @staticmethod
-    def env(var_name: str, default: Optional[str] = None) -> str:
+    def env(var_name: str, default: Optional[Any] = None) -> str:
         """
         Create an environment variable expression.
 
@@ -46,7 +46,7 @@ class Expressions:
             return f"${{env:{var_name}:{default}}}"
 
     @staticmethod
-    def config(key: str, default: Optional[str] = None) -> str:
+    def config(key: str, default: Optional[Any] = None) -> str:
         """
         Create a configuration value expression (placeholder for future implementation).
 
@@ -95,12 +95,12 @@ class Expressions:
 
 
 # Backward compatibility - keep the function-based API available
-def env(var_name: str, default: Optional[str] = None) -> str:
+def env(var_name: str, default: Optional[Any] = None) -> str:
     """Backward compatibility function. Use Expressions.env() instead."""
     return Expressions.env(var_name, default)
 
 
-def config(key: str, default: Optional[str] = None) -> str:
+def config(key: str, default: Optional[Any] = None) -> str:
     """Backward compatibility function. Use Expressions.config() instead."""
     return Expressions.config(key, default)
 
